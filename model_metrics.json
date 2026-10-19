@@ -1,0 +1,45 @@
+{
+    "best_model_name": "Linear Regression",
+    "best_metrics": {
+        "MAE": 1.8261,
+        "RMSE": 2.258,
+        "R2": 0.9772
+    },
+    "comparison": {
+        "Linear Regression": {
+            "MAE": 1.8261,
+            "RMSE": 2.258,
+            "R2": 0.9772
+        },
+        "Decision Tree": {
+            "MAE": 2.6256,
+            "RMSE": 3.3832,
+            "R2": 0.9489
+        },
+        "Random Forest": {
+            "MAE": 2.1671,
+            "RMSE": 2.7735,
+            "R2": 0.9657
+        },
+        "Support Vector Regression (SVR)": {
+            "MAE": 2.0074,
+            "RMSE": 2.4903,
+            "R2": 0.9723
+        }
+    },
+    "feature_columns": [
+        "previous_gpa",
+        "internal_marks",
+        "previous_subject_marks",
+        "quiz_marks",
+        "assignment_marks",
+        "attendance",
+        "study_hours",
+        "assignment_completion",
+        "quiz_participation",
+        "learning_activity",
+        "lbi"
+    ],
+    "test_samples": 300,
+    "train_samples": 1200
+}

@@ -1,0 +1,16 @@
+# Streamlit secrets containing sensitive credentials
+.streamlit/secrets.toml
+
+# Environment files
+.env
+.env.*
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Operating system files
+.DS_Store
+Thumbs.db
