@@ -147,6 +147,10 @@ def load_predictor():
     model_path = BASE_DIR / "models" / "best_model.pkl"
     preprocessor_path = BASE_DIR / "models" / "preprocessor.pkl"
     metrics_path = BASE_DIR / "models" / "model_metrics.json"
+    st.write("Application directory:", str(BASE_DIR))
+    st.write("Models directory exists:", (BASE_DIR / "models").exists())
+    st.write("Model file exists:", model_path.exists())
+    st.write("Preprocessor file exists:", preprocessor_path.exists())
 
     if not model_path.exists() or not preprocessor_path.exists():
         st.error(
