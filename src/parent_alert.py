@@ -219,8 +219,16 @@ def get_smtp_credentials(custom_creds: Optional[Dict[str, Any]] = None) -> Optio
         if hasattr(st, "secrets"):
             # Check user-specified keys in st.secrets
             s_sender = st.secrets.get("EMAIL_SENDER") or (st.secrets.get("smtp", {}).get("sender") if "smtp" in st.secrets else None)
-            s_user = st.secrets.get("EMAIL_SENDER") or (st.secrets.get("smtp", {}).get("username") if "smtp" in st.secrets else None)
-            s_pass = st.secrets.get("EMAIL_PASSWORD") or (st.secrets.get("smtp", {}).get("password") if "smtp" in st.secrets else None)
+            s_user = (
+                st.secrets.get("EMAIL_SENDER")
+                or st.secrets.get("SMTP_USERNAME")
+                or (st.secrets.get("smtp", {}).get("username") if "smtp" in st.secrets else None)
+            )
+            s_pass = (
+                st.secrets.get("EMAIL_PASSWORD")
+                or st.secrets.get("SMTP_PASSWORD")
+                or (st.secrets.get("smtp", {}).get("password") if "smtp" in st.secrets else None)
+            )
             s_server = st.secrets.get("SMTP_SERVER") or (st.secrets.get("smtp", {}).get("server") if "smtp" in st.secrets else "smtp.gmail.com")
             s_port = st.secrets.get("SMTP_PORT") or (st.secrets.get("smtp", {}).get("port") if "smtp" in st.secrets else 587)
 
@@ -314,22 +322,19 @@ def send_parent_alert_email(
         server = str(creds.get("server", "smtp.gmail.com")).strip()
         port = int(creds.get("port", 587))
 
-        # Connect using port 587 with STARTTLS for secure Gmail SMTP delivery
-               if port == 465:
-                    with smtplib.SMTP_SSL(
-                        server, port, timeout=30
-            ) as smtp:
+        # Gmail supports STARTTLS on port 587 and implicit TLS on port 465.
+        if port == 465:
+            with smtplib.SMTP_SSL(server, port, timeout=30) as smtp:
                 smtp.login(creds["username"], creds["password"])
                 smtp.send_message(msg)
-                else:
-                     with smtplib.SMTP(
-                     server, port, timeout=30
-            ) as smtp:
+        else:
+            with smtplib.SMTP(server, port, timeout=30) as smtp:
                 smtp.ehlo()
                 smtp.starttls()
                 smtp.ehlo()
                 smtp.login(creds["username"], creds["password"])
                 smtp.send_message(msg)
+
         return {
             "success": True,
             "status": "sent",
