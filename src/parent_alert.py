@@ -6,6 +6,9 @@ of at-risk students and handles safe email dispatch with Demo Mode fallback.
 
 import os
 import smtplib
+import json
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, List, Optional, Tuple
@@ -273,17 +276,15 @@ def send_parent_alert_email(
     smtp_credentials: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Send parent alert email using Gmail SMTP delivery on Port 587 with STARTTLS.
-    If SMTP credentials are configured, sends real email via smtplib.
-    If not configured, operates in safe Demo Mode and returns simulation status.
+    Send a parent alert using Resend's HTTPS API when RESEND_API_KEY is configured.
+    Otherwise, retain the existing Gmail SMTP and Demo Mode behavior.
 
-    Returns:
-        dict: {
-            "success": bool,
-            "status": "sent" | "demo" | "error",
-            "message": str,
-            "recipient": str
-        }
+    Streamlit Secrets for Resend:
+        RESEND_API_KEY = "re_..."
+        RESEND_FROM_EMAIL = "Student Performance <alerts@your-verified-domain.com>"
+
+    The sender must be allowed by the Resend account. For real parent recipients,
+    Resend may require a verified sending domain.
     """
     if not recipient_email or "@" not in recipient_email:
         return {
@@ -293,28 +294,102 @@ def send_parent_alert_email(
             "recipient": recipient_email,
         }
 
+    # Prefer Resend API when configured. HTTPS avoids relying on outbound SMTP ports.
+    resend_api_key = None
+    resend_from = None
+    try:
+        import streamlit as st
+        if hasattr(st, "secrets"):
+            resend_api_key = st.secrets.get("RESEND_API_KEY")
+            resend_from = st.secrets.get("RESEND_FROM_EMAIL")
+    except Exception:
+        pass
+
+    resend_api_key = resend_api_key or os.getenv("RESEND_API_KEY")
+    resend_from = resend_from or os.getenv("RESEND_FROM_EMAIL")
+
+    if resend_api_key:
+        if not resend_from:
+            return {
+                "success": False,
+                "status": "error",
+                "message": "RESEND_API_KEY is configured, but RESEND_FROM_EMAIL is missing. Add both to Streamlit Secrets.",
+                "recipient": recipient_email,
+            }
+
+        payload = {
+            "from": str(resend_from).strip(),
+            "to": [recipient_email],
+            "subject": subject,
+            "text": body_text,
+        }
+        if body_html:
+            payload["html"] = body_html
+
+        request = Request(
+            "https://api.resend.com/emails",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {str(resend_api_key).strip()}",
+                "Content-Type": "application/json",
+                "User-Agent": "Student-Performance-Prediction/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                response_body = response.read().decode("utf-8", errors="replace")
+                result = json.loads(response_body) if response_body else {}
+            email_id = result.get("id", "accepted")
+            return {
+                "success": True,
+                "status": "sent",
+                "message": f"Parent alert accepted by Resend (email ID: {email_id}). Check the Resend email logs and recipient inbox for delivery.",
+                "recipient": recipient_email,
+            }
+        except HTTPError as exc:
+            details = exc.read().decode("utf-8", errors="replace")
+            # Keep the useful provider response, but never reveal the API key.
+            return {
+                "success": False,
+                "status": "error",
+                "message": f"Resend API rejected the email (HTTP {exc.code}): {details[:700]}",
+                "recipient": recipient_email,
+            }
+        except (URLError, TimeoutError, OSError) as exc:
+            return {
+                "success": False,
+                "status": "error",
+                "message": f"Could not connect to Resend API: {str(exc)[:300]}",
+                "recipient": recipient_email,
+            }
+        except Exception as exc:
+            return {
+                "success": False,
+                "status": "error",
+                "message": f"Resend email error: {str(exc)[:300]}",
+                "recipient": recipient_email,
+            }
+
+    # If no Resend API key is configured, retain the existing SMTP / Demo Mode path.
     creds = get_smtp_credentials(smtp_credentials)
 
-    # DEMO MODE fallback
     if creds is None:
         return {
             "success": True,
             "status": "demo",
             "message": (
                 f"Demo Mode: Parent alert generated successfully for {recipient_email}. "
-                "(Simulated send — no real email dispatched because SMTP credentials are not configured in .streamlit/secrets.toml)."
+                "No real email was sent because neither RESEND_API_KEY nor SMTP credentials are configured."
             ),
             "recipient": recipient_email,
         }
 
-    # REAL EMAIL DISPATCH VIA GMAIL SMTP (PORT 587 WITH STARTTLS)
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = creds["sender"]
         msg["To"] = recipient_email
-
-        # Attach plain text and HTML versions
         msg.attach(MIMEText(body_text, "plain", "utf-8"))
         if body_html:
             msg.attach(MIMEText(body_html, "html", "utf-8"))
@@ -322,7 +397,6 @@ def send_parent_alert_email(
         server = str(creds.get("server", "smtp.gmail.com")).strip()
         port = int(creds.get("port", 587))
 
-        # Gmail supports STARTTLS on port 587 and implicit TLS on port 465.
         if port == 465:
             with smtplib.SMTP_SSL(server, port, timeout=30) as smtp:
                 smtp.login(creds["username"], creds["password"])
@@ -341,18 +415,18 @@ def send_parent_alert_email(
             "message": f"Parent alert email dispatched successfully to {recipient_email}.",
             "recipient": recipient_email,
         }
-
     except smtplib.SMTPAuthenticationError:
         return {
             "success": False,
             "status": "error",
-            "message": "SMTP Authentication failed. Please verify your email sender and app-specific password in .streamlit/secrets.toml.",
+            "message": "SMTP authentication failed. Check EMAIL_SENDER and EMAIL_PASSWORD (Gmail App Password).",
             "recipient": recipient_email,
         }
     except Exception as exc:
         return {
             "success": False,
             "status": "error",
-            "message": f"Failed to send email via SMTP: {str(exc)}",
+            "message": f"Failed to send email via SMTP: {str(exc)[:300]}",
             "recipient": recipient_email,
         }
+
