@@ -315,22 +315,21 @@ def send_parent_alert_email(
         port = int(creds.get("port", 587))
 
         # Connect using port 587 with STARTTLS for secure Gmail SMTP delivery
-       if port == 465:
-    with smtplib.SMTP_SSL(
-        server, port, timeout=30
-    ) as smtp:
-        smtp.login(creds["username"], creds["password"])
-        smtp.send_message(msg)
-else:
-    with smtplib.SMTP(
-        server, port, timeout=30
-    ) as smtp:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        smtp.login(creds["username"], creds["password"])
-        smtp.send_message(msg)
-
+               if port == 465:
+                    with smtplib.SMTP_SSL(
+                        server, port, timeout=30
+            ) as smtp:
+                smtp.login(creds["username"], creds["password"])
+                smtp.send_message(msg)
+                else:
+                     with smtplib.SMTP(
+                     server, port, timeout=30
+            ) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+                smtp.login(creds["username"], creds["password"])
+                smtp.send_message(msg)
         return {
             "success": True,
             "status": "sent",
